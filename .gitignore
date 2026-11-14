@@ -1,0 +1,36 @@
+# Python virtual environments
+.venv/
+.venv-*/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build outputs
+build/
+dist/
+
+# IDE / macOS
+.DS_Store
+.idea/
+.vscode/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.log
+
+# SC2 game and replay files
+*.SC2Replay
+*.SC2Map
+
+# Temporary files
+*.tmp
+*.bak
