@@ -395,3 +395,62 @@ PySC2 默认测试程序会持续运行多个 Episode，可能明显快于真人
 - 保留 PySC2 本地补丁。
 - 不要直接升级全部依赖。
 - 重要环境变更后重新运行 PySC2、BurnySc2 和 Replay 三项测试。
+
+## PATCH-LAN-001：PySC2 LAN 接口参数不兼容
+
+**问题：**
+
+`SC2Env._get_interface()` 不接受 `agent_interface_format` 关键字参数。
+
+**原因：**
+
+调用方 `LanSC2Env` 使用旧参数名，而当前函数签名为：
+
+`_get_interface(interface_format, require_raw)`
+
+**修复：**
+
+将调用处的关键字参数改为 `interface_format`。
+
+**状态：** 已越过该异常。
+
+## PATCH-LAN-002：LanSC2Env 缺少 _requested_races
+
+**问题：**
+
+`SC2Env.reset()` 访问 `_requested_races` 时抛出 AttributeError。
+
+**原因：**
+
+`LanSC2Env` 自行初始化环境，没有初始化父类 reset() 所需的全部属性。
+
+**实验性修复：**
+
+在 LAN 环境初始化中添加：
+
+`self._requested_races = {0: int(race)}`
+
+**状态：** 实验性修复，尚未完成端到端验证。
+
+## 尚未解决：真人与 Agent 对战连接中断
+
+在后续实验中，Agent 端执行 `join_game()` 时出现：
+
+`WebSocketConnectionClosedException`
+
+以及：
+
+`ConnectionError: Error during join_game`
+
+目前无法确定是 SC2 进程崩溃、真人端退出，还是多人游戏连接问题。
+
+**后续排查：**
+
+1. 检查真人端日志。
+2. 检查 macOS SC2 崩溃报告。
+3. 确认双客户端进程和端口状态。
+4. 对照 PySC2 LAN 模块与 SC2Env 的剩余接口差异。
+
+本次 LAN 补丁脚本：
+
+`patches/fix_pysc2_lan.py`
