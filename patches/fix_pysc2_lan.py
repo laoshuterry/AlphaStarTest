@@ -1,60 +1,84 @@
-cd /Volumes/MacExt/Developer/sc2-coach
-mkdir -p patches
+"""Reproducible LAN compatibility patch for PySC2 4.0.0 (no SC2 required).
 
-cat > patches/fix_pysc2_lan.py <<'PY'
-"""PySC2 LAN compatibility fixes for the tested local environment.
-
-PATCH-001: Fix _get_interface keyword argument.
-PATCH-002: Initialize _requested_races for SC2Env.reset().
-
-PATCH-002 is experimental. Human-vs-agent gameplay is not yet verified.
+Default: preview diff. --apply: backup then replace. --check: CI verification.
+Unknown source layouts fail before writing. Importing this module never patches.
 """
-
+import argparse
+import difflib
+import importlib.metadata
+import importlib.util
 from pathlib import Path
-import pysc2
+import re
 
-path = Path(pysc2.__file__).parent / "env" / "lan_sc2_env.py"
-source = path.read_text(encoding="utf-8")
-original = source
+OLD = 'agent_interface_format=agent_interface_format, require_raw=visualize)'
+NEW = 'interface_format=agent_interface_format, require_raw=visualize)'
+ANCHOR = '    self._game_info = [self._controllers[0].game_info()]'
+RACES = '''
+    self._requested_races = {
+        info.player_id: info.race_requested
+        for info in self._game_info[0].player_info
+        if info.type != sc_pb.Observer
+    }'''
 
-# PATCH-001: _get_interface() accepts interface_format, not
-# agent_interface_format.
-old_keyword = (
-    "agent_interface_format=agent_interface_format, "
-    "require_raw=visualize)"
-)
-new_keyword = (
-    "interface_format=agent_interface_format, "
-    "require_raw=visualize)"
-)
 
-if old_keyword in source:
-    source = source.replace(old_keyword, new_keyword, 1)
-    print("PATCH-001: applied")
-elif new_keyword in source:
-    print("PATCH-001: already applied")
-else:
-    raise RuntimeError("PATCH-001: unexpected source layout")
+def transform(source):
+    """Accept stock 4.0.0, the previous local patch, or this patch."""
+    compile(source, '<original LAN>', 'exec')
+    if source.count('        ' + OLD) + source.count('        ' + NEW) != 1:
+        raise ValueError('Unexpected _get_interface call; no changes written')
+    source = source.replace(OLD, NEW)
+    # Retire the old placeholder player ID. Keep unrelated local edits.
+    source = re.sub(r'^    self\._requested_races = \{0: int\(race\)\}\n', '',
+                    source, flags=re.MULTILINE)
+    if source.count(ANCHOR) != 1:
+        raise ValueError('Unexpected game_info layout; no changes written')
+    if ANCHOR + RACES not in source:
+        if 'self._requested_races =' in source:
+            raise ValueError('Unknown race mapping; no changes written')
+        source = source.replace(ANCHOR, ANCHOR + RACES)
+    if source.count('self._requested_races =') != 1:
+        raise ValueError('Ambiguous race mapping; no changes written')
+    compile(source, '<patched LAN>', 'exec')
+    return source
 
-# PATCH-002: LAN environment does not initialize the attribute
-# accessed by the inherited SC2Env.reset() method.
-anchor = "    self._action_delay_fns = [None]"
-addition = (
-    anchor
-    + "\n    # Experimental LAN compatibility fix.\n"
-    + "    self._requested_races = {0: int(race)}"
-)
 
-if "self._requested_races = {0: int(race)}" in source:
-    print("PATCH-002: already applied")
-elif source.count(anchor) == 1:
-    source = source.replace(anchor, addition, 1)
-    print("PATCH-002: applied (experimental)")
-else:
-    raise RuntimeError("PATCH-002: unexpected source layout")
+def patch_file(path, apply=False):
+    original = path.read_text(encoding='utf-8')
+    updated = transform(original)
+    if apply and updated != original:
+        backup = path.with_suffix(path.suffix + '.lan.bak')
+        # Never overwrite a previous backup of different contents.
+        if backup.exists() and backup.read_text(encoding='utf-8') != original:
+            raise ValueError(f'Backup already exists: {backup}; inspect it first')
+        if not backup.exists():
+            with backup.open('x', encoding='utf-8') as out:
+                out.write(original)
+        path.write_text(updated, encoding='utf-8')
+    return original, updated
 
-if source != original:
-    path.write_text(source, encoding="utf-8")
 
-print(f"Patch verification complete: {path}")
-PY
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--target', type=Path, help='Explicit lan_sc2_env.py copy')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--apply', action='store_true')
+    mode.add_argument('--check', action='store_true')
+    args = parser.parse_args()
+    path = args.target
+    if path is None:
+        if importlib.metadata.version('PySC2') != '4.0.0':
+            parser.error('Only installed PySC2 4.0.0 is supported')
+        path = Path(importlib.util.find_spec('pysc2').origin).parent / 'env/lan_sc2_env.py'
+    original, updated = patch_file(path, apply=args.apply)
+    if original == updated:
+        print(f'Already patched: {path}')
+        return 0
+    print(''.join(difflib.unified_diff(original.splitlines(True),
+                                      updated.splitlines(True),
+                                      fromfile=str(path), tofile=str(path))), end='')
+    print('Applied (backup: .py.lan.bak)' if args.apply else 'Patch required (preview only)')
+    return 1 if args.check else 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

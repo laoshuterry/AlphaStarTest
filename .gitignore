@@ -34,3 +34,6 @@ dist/
 # Temporary files
 *.tmp
 *.bak
+
+# LAN runtime logs, process identities and lock files
+/logs/

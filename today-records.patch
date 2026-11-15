@@ -1,0 +1,181 @@
+--- a/README.md
++++ b/README.md
+@@ -500,10 +500,10 @@
+ - SC2 客户端启动与 API 通信
+ - Simple64 地图
+ - sc2reader Replay 基础测试
++- 真人玩家与随机 Agent 完整对局（2026-11-15，关闭 RGB）
+ 
+ 尚未验证：
+ 
+-- 真人玩家与 API Bot 同局对战
+ - Replay 深度战术分析
+ - 自适应难度
+ - AI 教练反馈
+@@ -558,5 +558,8 @@
+ ## Codex LAN 回归与排查
+ 
+ 可重复补丁、无需启动游戏的自动测试及双端日志复现流程见
+-[LAN_TESTING.md](docs/LAN_TESTING.md)。当前真人 LAN 对战仍待端到端验证。
++[LAN_TESTING.md](docs/LAN_TESTING.md)。真人已在关闭 RGB 的配置下完成一局并获胜。
+ 依赖锁定文件以 `requirements/bot.txt` 和 `requirements/pysc2.txt` 为准。
++
++今日已跑通命令、后台脚本、验证边界和提交清单见
++[2026-11-15 对战记录](docs/SESSION_2026-11-15.md)。修正版停止功能仍待真实对局确认。
+--- a/PATCH.md
++++ b/PATCH.md
+@@ -472,3 +472,10 @@
+ 本次自动验证：8 项 unittest 通过（含本机安装源码在内存应用补丁后的运行验证，
+ 以及 CLI check/apply/repeat 的退出码）。第三方库有弃用警告，不影响通过结果。
+ 原项目写入权限未获批，因此修改仅完成于工作副本，尚未应用至原项目虚拟环境。
++
++## 2026-11-15 后续验证更新
++
++此前“尚未应用”的记录为当时状态。目前原项目补丁检查返回 Already patched，8 项离线测试通过。
++用户确认真人 render、Agent norender、双方 realtime、关闭 RGB 的配置已完成一局并获胜。
++初版 lan.py 停止不彻底；新版已在项目中，5 项停止逻辑模拟测试通过，真实停止尚待确认。
++完整命令及证据边界见 [当日记录](docs/SESSION_2026-11-15.md)。早期断连根因仍未确定。
+--- a/.gitignore
++++ b/.gitignore
+@@ -34,3 +34,6 @@
+ # Temporary files
+ *.tmp
+ *.bak
++
++# LAN runtime logs, process identities and lock files
++/logs/
+--- a/docs/LAN_TESTING.md
++++ b/docs/LAN_TESTING.md
+@@ -43,7 +43,7 @@
+ mkdir -p logs
+ ./.venv-pysc2/bin/python -u -m pysc2.bin.play_vs_agent \
+   --human --map Simple64 --host 127.0.0.1 --config_port 14380 \
+-  --realtime --norender --rgb_screen_size 0 --rgb_minimap_size 0 \
++  --realtime --render --rgb_screen_size 0 --rgb_minimap_size 0 \
+   > logs/lan-human.log 2>&1
+ ```
+ 
+@@ -60,9 +60,14 @@
+ 日志输出被重定向，可另开终端 `tail -f logs/lan-human.log logs/lan-agent.log`。
+ 每次实验前另存旧日志；两个端的 realtime 必须一致（当前 LAN 代码没有自动同步它）。
+ 端口范围是 14380–14384。成功标准：两端 join 成功，Agent 输出
+-`Connected, starting run_loop.`，真人端进入地图且双方持续推进；完整对局另行验证。
++`Connected, starting run_loop.`，真人端进入地图且双方持续推进。2026-11-15 用户已确认完整对局并获胜。
+ 失败时保留两端完整日志、SC2 版本、进程退出码和 macOS DiagnosticReports 中同一时刻的 SC2 报告。
+ 不要把程序结束后的 `sys.meta_path is None` 当成首个故障。
+ 
+ 后续对照顺序：特征层基线 → 启用默认 RGB → 两端同时改为非实时。
+ 每次只改变一个条件。无对应崩溃报告时，不能断言 SC2 崩溃；WebSocket 断开只说明连接结束。
++
++## 最新实测记录
++
++真人操作请使用上面的 `--render` 并在 PySC2/Pygame 窗口输入。
++后台脚本、停止问题和已跑通的带时间戳日志命令见 [当日记录](SESSION_2026-11-15.md)。
+--- /dev/null
++++ b/docs/SESSION_2026-11-15.md
+@@ -0,0 +1,105 @@
++# 2026-11-15：真人 LAN 对战跑通记录
++
++## 实际验证结果
++
++- 用户使用下述配置完成一局真人对战并获胜；真人在 PySC2/Pygame 窗口操作。
++- 真人端 `--render`，Agent 端 `--norender`；双方实时模式、RGB 关闭。
++- 对手是 `pysc2.agents.random_agent.RandomAgent`，没有完整策略，不是 AlphaStar。
++- 原仓库的补丁检查已返回 `Already patched`；在原项目虚拟环境重跑 8 项离线测试全部通过。
++- 启动日志记录 SC2 `Base97563`，并出现 `Connected, starting run_loop.`。
++- 初版 lan.py 停止功能被用户确认无效。修正版已在项目中，停止逻辑通过 5 项模拟测试，真实游戏停止效果尚待用户确认。
++- 早期 join_game 断连根因仍未确定；本次成功不能证明 RGB 就是根因。
++
++## 环境
++
++项目：`/Volumes/MacExt/Developer/sc2-coach`；游戏：`/Volumes/MacExt/BattleNet/StarCraft II`。
++使用 `.venv-pysc2/bin/python`（Python 3.11）、PySC2 4.0.0、protobuf 3.20.3。
++依赖快照：`requirements/pysc2.txt`；BurnySc2 的独立依赖为 `requirements/bot.txt`。
++
++## 已跑通的手动双端命令
++
++先在两个终端分别进入项目目录。真人端看到 `Join:` 后，再启动 Agent。
++
++真人端：
++
++```bash
++cd /Volumes/MacExt/Developer/sc2-coach
++export SC2PATH="/Volumes/MacExt/BattleNet/StarCraft II"
++mkdir -p logs
++./.venv-pysc2/bin/python -u -m pysc2.bin.play_vs_agent \
++  --human --map Simple64 --host 127.0.0.1 --config_port 14380 \
++  --realtime --render --rgb_screen_size 0 --rgb_minimap_size 0 \
++  2>&1 | tee "logs/lan-human-$(date +%Y%m%d-%H%M%S).log"
++```
++
++Agent 端：
++
++```bash
++cd /Volumes/MacExt/Developer/sc2-coach
++export SC2PATH="/Volumes/MacExt/BattleNet/StarCraft II"
++mkdir -p logs
++./.venv-pysc2/bin/python -u -m pysc2.bin.play_vs_agent \
++  --host 127.0.0.1 --config_port 14380 --realtime --norender \
++  --agent pysc2.agents.random_agent.RandomAgent \
++  --rgb_screen_size 0 --rgb_minimap_size 0 \
++  2>&1 | tee "logs/lan-agent-$(date +%Y%m%d-%H%M%S).log"
++```
++
++在 PySC2/Pygame 窗口左键选单位，右键移动或采矿，点击小地图移动视角，`/` 查看帮助。
++`--norender` 不开启该输入窗口，之前两端均使用它时用户无法操作。
++手动启动的进程在各自终端按 Ctrl+C 停止；不由 lan.py 管理。
++
++## 后台启动脚本
++
++```bash
++cd /Volumes/MacExt/Developer/sc2-coach
++python3 lan.py start
++python3 lan.py status
++python3 lan.py stop
++python3 lan.py status
++```
++
++`start` 先等真人端就绪，再启动 Agent，确认加入后启动器返回；双端继续后台运行，
++但真人操作窗口仍可见。日志在 `logs/lan-时间/human.log` 和 `agent.log`。
++进程信息在 `logs/.lan-run/state.json`。不是系统服务，不会重启机器后自启动或自动重启崩溃的客户端。
++不要在进程仍运行时删除日志或状态文件；修正版停止功能依赖它们找回残留 SC2。
++修正版以启动时间校验 PID，跟踪子进程，并根据日志中本次 SC2 的唯一 tempDir 找回孤立进程；
++失败会报错，不再无条件报告停止。真实停止仍需验证，不要把模拟测试当成成功实测。
++
++## 补丁与测试
++
++应用源码补丁前先停止游戏。Git 补丁只修改仓库文件，虚拟环境需要单独应用：
++
++```bash
++./.venv-pysc2/bin/python -B patches/fix_pysc2_lan.py
++./.venv-pysc2/bin/python -B patches/fix_pysc2_lan.py --apply
++./.venv-pysc2/bin/python -B patches/fix_pysc2_lan.py --check
++./.venv-pysc2/bin/python -B -m unittest discover -s tests -p 'test_*.py' -v
++```
++
++当前检查已经通过，无需再次应用旧的 `pysc2-lan-compat.patch`。
++补丁默认预览，应用时备份 `.py.lan.bak`；重新安装 PySC2 后还需恢复 colors 兼容补丁。
++8 项测试模拟游戏进程和网络，验证初始化、请求和 reset，不是实际游戏对局测试。
++
++## 待办
++
++1. 用户确认修正版 lan.py stop 能关闭两个 Python 客户端及 SC2 窗口。
++2. DI-star 仅完成候选模型调查，未下载、安装或接入；不要把随机 Agent 当成 DI-star。
++3. 保留当前可运行环境，另设环境验证 DI-star 的虫族对虫族模型与 SC2 4.10.0 兼容性。
++
++## 用户手动提交
++
++```bash
++git status --short
++git diff --check
++git diff -- README.md PATCH.md .gitignore patches/fix_pysc2_lan.py
++# 查看新增的 docs、lan.py 和 tests 后，只添加以下文件：
++git add README.md PATCH.md .gitignore docs/LAN_TESTING.md \
++  docs/SESSION_2026-11-15.md lan.py patches/fix_pysc2_lan.py \
++  tests/test_lan_compat.py tests/fixtures/lan_sc2_env_4_0_0.py.txt
++git diff --cached --check
++git diff --cached --stat
++git commit -m "fix: stabilize PySC2 LAN tooling and document playable setup"
++```
++
++不提交虚拟环境、运行日志、PID/锁文件、地图、Replay 或补丁备份。此次整理不会替用户提交或推送。

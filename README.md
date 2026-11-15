@@ -500,10 +500,10 @@ python -m pysc2.bin.agent --map Simple64
 - SC2 客户端启动与 API 通信
 - Simple64 地图
 - sc2reader Replay 基础测试
+- 真人玩家与随机 Agent 完整对局（2026-11-15，关闭 RGB）
 
 尚未验证：
 
-- 真人玩家与 API Bot 同局对战
 - Replay 深度战术分析
 - 自适应难度
 - AI 教练反馈
@@ -554,3 +554,12 @@ python -m pysc2.bin.agent --map Simple64
 
 当前项目目标不是复现 AlphaStar，而是建立一个可持续扩展的 SC2 AI 实验平台，逐步实现对战、复盘分析和自适应陪练。
 
+
+## Codex LAN 回归与排查
+
+可重复补丁、无需启动游戏的自动测试及双端日志复现流程见
+[LAN_TESTING.md](docs/LAN_TESTING.md)。真人已在关闭 RGB 的配置下完成一局并获胜。
+依赖锁定文件以 `requirements/bot.txt` 和 `requirements/pysc2.txt` 为准。
+
+今日已跑通命令、后台脚本、验证边界和提交清单见
+[2026-11-15 对战记录](docs/SESSION_2026-11-15.md)。修正版停止功能仍待真实对局确认。

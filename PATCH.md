@@ -454,3 +454,28 @@ PySC2 默认测试程序会持续运行多个 Episode，可能明显快于真人
 本次 LAN 补丁脚本：
 
 `patches/fix_pysc2_lan.py`
+
+## PATCH-LAN-003：补丁脚本可执行性与真实玩家映射
+
+本次接管基线：`6448773`，原仓库 main 工作区干净。
+发现 `patches/fix_pysc2_lan.py` 包含 `cd`、`mkdir`、heredoc 等 shell 文本，
+无法作为 Python 脚本执行。已改为可导入、默认预览、显式应用并备份的脚本。
+修正旧 PATCH-LAN-002 的 `{0: int(race)}` 占位值，改为 join 后从
+`game_info.player_info` 读取真实 player_id/race_requested，并排除 Observer，
+与当前安装的 SC2Env._create_join 实现一致。
+
+离线回归验证补丁迁移、重复执行、备份保护、未知布局拒绝，以及模拟外部依赖下的
+LAN 构造、端口请求、双方种族和 reset。未将模拟测试等同于真实 LAN 成功。
+join_game 断开仍未定位；此次种族映射在 join 成功后执行，不可能直接修复 join 内的断连。
+具体复现和验证边界见 `docs/LAN_TESTING.md`。
+
+本次自动验证：8 项 unittest 通过（含本机安装源码在内存应用补丁后的运行验证，
+以及 CLI check/apply/repeat 的退出码）。第三方库有弃用警告，不影响通过结果。
+原项目写入权限未获批，因此修改仅完成于工作副本，尚未应用至原项目虚拟环境。
+
+## 2026-11-15 后续验证更新
+
+此前“尚未应用”的记录为当时状态。目前原项目补丁检查返回 Already patched，8 项离线测试通过。
+用户确认真人 render、Agent norender、双方 realtime、关闭 RGB 的配置已完成一局并获胜。
+初版 lan.py 停止不彻底；新版已在项目中，5 项停止逻辑模拟测试通过，真实停止尚待确认。
+完整命令及证据边界见 [当日记录](docs/SESSION_2026-11-15.md)。早期断连根因仍未确定。
